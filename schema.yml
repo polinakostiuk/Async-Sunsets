@@ -1,0 +1,769 @@
+openapi: 3.0.3
+info:
+  title: SecureFlow API
+  version: 1.0.0
+  description: Інтерактивна платформа для моделювання загроз і візуалізації кібератак
+    у вебзастосунках. Надає ендпоінти для управління сценаріями атак, їх виконання/симуляції
+    та перевірки надійності бар'єрів захисту.
+paths:
+  /api/auth/token/:
+    post:
+      operationId: auth_token_create
+      description: |-
+        Takes a set of user credentials and returns an access and refresh JSON web
+        token pair to prove the authentication of those credentials.
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenObtainPairRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenObtainPairRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TokenObtainPairRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenObtainPair'
+          description: ''
+  /api/auth/token/refresh/:
+    post:
+      operationId: auth_token_refresh_create
+      description: |-
+        Takes a refresh type JSON web token and returns an access type JSON web
+        token if the refresh token is valid.
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRefreshRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenRefreshRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TokenRefreshRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenRefresh'
+          description: ''
+  /api/scenarios/:
+    get:
+      operationId: scenarios_list
+      description: |-
+        Повертає список сценаріїв атак залежно від прав доступу:
+        - **Гість (неавтентифікований)**: лише опубліковані сценарії (`is_published=true`).
+        - **Студент/Користувач**: усі опубліковані + власні чернетки.
+        - **Адміністратор**: усі сценарії системи (включно з неопублікованими чернетками всіх авторів).
+
+        Підтримує фільтрацію за `vulnerability_type`, `severity` та пошук за ключовим словом `search`.
+      summary: Отримати список сценаріїв атак
+      parameters:
+      - in: query
+        name: search
+        schema:
+          type: string
+        description: Пошук у назві або описі сценарію
+      - in: query
+        name: severity
+        schema:
+          type: string
+        description: Фільтр за рівнем критичності (LOW, MEDIUM, HIGH, CRITICAL)
+      - in: query
+        name: vulnerability_type
+        schema:
+          type: string
+        description: Фільтр за типом вразливості (SQLI, XSS, BAC, CSRF, SSRF)
+      tags:
+      - Scenarios
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AttackScenario'
+          description: ''
+    post:
+      operationId: scenarios_create
+      description: |-
+        Створює новий сценарій атаки. Потрібна автентифікація.
+        - Звичайні користувачі створюють неопубліковані сценарії (`is_published=false`).
+        - Тільки адміністратор має право встановлювати `is_published=true`.
+      summary: Створити новий сценарій атаки
+      tags:
+      - Scenarios
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AttackScenarioRequest'
+            examples:
+              ПрикладСтворенняSQLInjectionСценарію:
+                value:
+                  title: SQL ін'єкція у формі авторизації
+                  description: Демонстрація обходу автентифікації через невалідований
+                    ввід логіна.
+                  vulnerability_type: SQLI
+                  severity: HIGH
+                  attack_vector: Введення ' OR '1'='1' у поле логіна для обходу перевірки
+                    пароля.
+                  defense_mechanism: Використання параметризованих запитів (Prepared
+                    Statements) та ORM.
+                  defense_active: true
+                  is_published: false
+                summary: Приклад створення SQL Injection сценарію
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AttackScenarioRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AttackScenarioRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttackScenario'
+          description: ''
+        '400':
+          description: Помилка валідації вхідних даних
+        '401':
+          description: Користувач не автентифікований
+  /api/scenarios/{id}/:
+    get:
+      operationId: scenarios_retrieve
+      description: |-
+        Повертає повну інформацію про конкретний сценарій атаки.
+        - Опубліковані сценарії доступні всім (включно з гостями).
+        - Неопубліковані доступні лише їхньому автору або адміністратору.
+      summary: Отримати деталі сценарію
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Сценарій атаки.
+        required: true
+      tags:
+      - Scenarios
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttackScenario'
+          description: ''
+        '401':
+          description: Необхідна автентифікація для перегляду неопублікованого сценарію
+        '403':
+          description: Недостатньо прав для перегляду чужої чернетки
+        '404':
+          description: Сценарій не знайдено
+    put:
+      operationId: scenarios_update
+      description: |-
+        Повне оновлення сценарію. Дозволено лише автору сценарію або адміністратору.
+        Лише адміністратор може змінити статус `is_published` на `true`.
+      summary: Повне оновлення сценарію (PUT)
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Сценарій атаки.
+        required: true
+      tags:
+      - Scenarios
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AttackScenarioRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AttackScenarioRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AttackScenarioRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttackScenario'
+          description: ''
+        '400':
+          description: Некоректні дані
+        '401':
+          description: Не автентифіковано
+        '403':
+          description: Недостатньо прав (не є автором чи адміном)
+        '404':
+          description: Сценарій не знайдено
+    patch:
+      operationId: scenarios_partial_update
+      description: Часткове оновлення полів сценарію. Дозволено автору або адміністратору.
+      summary: Часткове оновлення сценарію (PATCH)
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Сценарій атаки.
+        required: true
+      tags:
+      - Scenarios
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedAttackScenarioRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedAttackScenarioRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedAttackScenarioRequest'
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttackScenario'
+          description: ''
+        '400':
+          description: Некоректні дані
+        '401':
+          description: Не автентифіковано
+        '403':
+          description: Недостатньо прав
+        '404':
+          description: Сценарій не знайдено
+    delete:
+      operationId: scenarios_destroy
+      description: Видаляє сценарій атаки. Дозволено лише автору сценарію або адміністратору.
+      summary: Видалити сценарій атаки
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Сценарій атаки.
+        required: true
+      tags:
+      - Scenarios
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '204':
+          description: Сценарій успішно видалено
+        '401':
+          description: Не автентифіковано
+        '403':
+          description: Недостатньо прав для видалення чужого сценарію
+        '404':
+          description: Сценарій не знайдено
+  /api/scenarios/{id}/history/:
+    get:
+      operationId: scenarios_history_list
+      description: Повертає історію запусків симуляцій для вказаного сценарію. Потрібна
+        автентифікація.
+      summary: Отримати журнал симуляцій для даного сценарію
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Сценарій атаки.
+        required: true
+      tags:
+      - Scenarios
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SimulationLog'
+          description: ''
+        '401':
+          description: Не автентифіковано
+        '403':
+          description: Недостатньо прав
+        '404':
+          description: Сценарій не знайдено
+  /api/scenarios/{id}/simulate/:
+    post:
+      operationId: scenarios_simulate_create
+      description: |-
+        Запускає симуляцію вектора атаки з переданим корисним навантаженням (payload) та обраним станом захисного бар'єру (`defense_enabled`).
+        - Якщо `defense_enabled=true`: захисний механізм блокує атаку (статус `MITIGATED`).
+        - Якщо `defense_enabled=false`: атака проходить успішно (статус `BREACHED`).
+        Потрібна автентифікація. Результат автоматично фіксується в журналі аудиту безпеки.
+      summary: Запуск симуляції атаки для сценарію
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Сценарій атаки.
+        required: true
+      tags:
+      - Scenarios
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SimulationRequestRequest'
+            examples:
+              СимуляціяЗУвімкненимЗахистом:
+                value:
+                  payload: ''' OR 1=1 --'
+                  defense_enabled: true
+                summary: Симуляція з увімкненим захистом
+              СимуляціяЗВимкненимЗахистом:
+                value:
+                  payload: <script>alert('XSS')</script>
+                  defense_enabled: false
+                summary: Симуляція з вимкненим захистом
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SimulationRequestRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SimulationRequestRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimulationResponse'
+          description: ''
+        '400':
+          description: Некоректне корисне навантаження або параметри
+        '401':
+          description: Не автентифіковано
+        '403':
+          description: Немає доступу до симуляції даного сценарію
+        '404':
+          description: Сценарій не знайдено
+components:
+  schemas:
+    AttackScenario:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        title:
+          type: string
+          title: Назва сценарію
+          description: Коротка та інформативна назва вразливості або ланцюга атаки
+          maxLength: 200
+        description:
+          type: string
+          title: Опис сценарію
+          description: Детальний опис вектора вразливості та контексту застосунку
+        vulnerability_type:
+          allOf:
+          - $ref: '#/components/schemas/VulnerabilityTypeEnum'
+          title: Тип вразливості
+        severity:
+          allOf:
+          - $ref: '#/components/schemas/SeverityEnum'
+          title: Рівень критичності
+        attack_vector:
+          type: string
+          title: Вектор атаки
+          description: Опис технічних кроків та корисного навантаження (payload)
+        defense_mechanism:
+          type: string
+          title: Механізм захисту
+          description: Опис захисного бар'єру (параметризація, санітизація, RBAC тощо)
+        defense_active:
+          type: boolean
+          title: Захисний бар'єр активний
+          description: Чи активовано захисний механізм за замовчуванням
+        is_published:
+          type: boolean
+          title: Опубліковано
+          description: Чи доступний сценарій для публічного перегляду гостями
+        created_by:
+          type: integer
+          readOnly: true
+          title: Автор
+        created_by_username:
+          type: string
+          description: Required. 150 characters or fewer. Letters, digits and @/./+/-/_
+            only.
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+          title: Створено
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+          title: Оновлено
+      required:
+      - attack_vector
+      - created_at
+      - created_by
+      - created_by_username
+      - defense_mechanism
+      - description
+      - id
+      - title
+      - updated_at
+    AttackScenarioRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+          title: Назва сценарію
+          description: Коротка та інформативна назва вразливості або ланцюга атаки
+          maxLength: 200
+        description:
+          type: string
+          minLength: 1
+          title: Опис сценарію
+          description: Детальний опис вектора вразливості та контексту застосунку
+        vulnerability_type:
+          allOf:
+          - $ref: '#/components/schemas/VulnerabilityTypeEnum'
+          title: Тип вразливості
+        severity:
+          allOf:
+          - $ref: '#/components/schemas/SeverityEnum'
+          title: Рівень критичності
+        attack_vector:
+          type: string
+          minLength: 1
+          title: Вектор атаки
+          description: Опис технічних кроків та корисного навантаження (payload)
+        defense_mechanism:
+          type: string
+          minLength: 1
+          title: Механізм захисту
+          description: Опис захисного бар'єру (параметризація, санітизація, RBAC тощо)
+        defense_active:
+          type: boolean
+          title: Захисний бар'єр активний
+          description: Чи активовано захисний механізм за замовчуванням
+        is_published:
+          type: boolean
+          title: Опубліковано
+          description: Чи доступний сценарій для публічного перегляду гостями
+      required:
+      - attack_vector
+      - defense_mechanism
+      - description
+      - title
+    PatchedAttackScenarioRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+          title: Назва сценарію
+          description: Коротка та інформативна назва вразливості або ланцюга атаки
+          maxLength: 200
+        description:
+          type: string
+          minLength: 1
+          title: Опис сценарію
+          description: Детальний опис вектора вразливості та контексту застосунку
+        vulnerability_type:
+          allOf:
+          - $ref: '#/components/schemas/VulnerabilityTypeEnum'
+          title: Тип вразливості
+        severity:
+          allOf:
+          - $ref: '#/components/schemas/SeverityEnum'
+          title: Рівень критичності
+        attack_vector:
+          type: string
+          minLength: 1
+          title: Вектор атаки
+          description: Опис технічних кроків та корисного навантаження (payload)
+        defense_mechanism:
+          type: string
+          minLength: 1
+          title: Механізм захисту
+          description: Опис захисного бар'єру (параметризація, санітизація, RBAC тощо)
+        defense_active:
+          type: boolean
+          title: Захисний бар'єр активний
+          description: Чи активовано захисний механізм за замовчуванням
+        is_published:
+          type: boolean
+          title: Опубліковано
+          description: Чи доступний сценарій для публічного перегляду гостями
+    SeverityEnum:
+      enum:
+      - LOW
+      - MEDIUM
+      - HIGH
+      - CRITICAL
+      type: string
+      description: |-
+        * `LOW` - Низький
+        * `MEDIUM` - Середній
+        * `HIGH` - Високий
+        * `CRITICAL` - Критичний
+    SimulationLog:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        scenario:
+          type: integer
+          readOnly: true
+          title: Сценарій
+        scenario_title:
+          type: string
+          title: Назва сценарію
+          description: Коротка та інформативна назва вразливості або ланцюга атаки
+          readOnly: true
+        executed_by:
+          type: integer
+          readOnly: true
+          nullable: true
+          title: Користувач
+        executed_by_username:
+          type: string
+          description: Required. 150 characters or fewer. Letters, digits and @/./+/-/_
+            only.
+          readOnly: true
+        payload:
+          type: string
+          readOnly: true
+          title: Корисне навантаження
+        defense_enabled:
+          type: boolean
+          readOnly: true
+          title: Захист увімкнено
+        status:
+          allOf:
+          - $ref: '#/components/schemas/StatusEnum'
+          readOnly: true
+          title: Статус результату
+        result_details:
+          type: string
+          readOnly: true
+          title: Деталі результату
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+          title: Час запуску
+      required:
+      - created_at
+      - defense_enabled
+      - executed_by
+      - executed_by_username
+      - id
+      - payload
+      - result_details
+      - scenario
+      - scenario_title
+      - status
+    SimulationRequestRequest:
+      type: object
+      properties:
+        payload:
+          type: string
+          minLength: 1
+          description: Корисне навантаження атаки (наприклад, SQL ін'єкція або XSS
+            скрипт)
+          maxLength: 1000
+        defense_enabled:
+          type: boolean
+          default: true
+          description: Чи активовано захисний бар'єр під час виконання симуляції
+      required:
+      - payload
+    SimulationResponse:
+      type: object
+      properties:
+        simulation_id:
+          type: integer
+          description: Унікальний ідентифікатор запущеної симуляції
+        scenario_id:
+          type: integer
+          description: Ідентифікатор сценарію атаки
+        scenario_title:
+          type: string
+          description: Назва сценарію
+        vulnerability_type:
+          type: string
+          description: Тип вразливості
+        defense_enabled:
+          type: boolean
+          description: Статус захисного бар'єру
+        is_blocked:
+          type: boolean
+          description: Чи була атака успішно нейтралізована
+        status:
+          allOf:
+          - $ref: '#/components/schemas/StatusEnum'
+          description: |-
+            Статус симуляції
+
+            * `MITIGATED` - Заблоковано захистом
+            * `BREACHED` - Успішний прорив
+            * `ERROR` - Помилка симуляції
+        message:
+          type: string
+          description: Повідомлення з результатом виконання атаки
+        created_at:
+          type: string
+          format: date-time
+          description: Мітка часу виконання
+      required:
+      - created_at
+      - defense_enabled
+      - is_blocked
+      - message
+      - scenario_id
+      - scenario_title
+      - simulation_id
+      - status
+      - vulnerability_type
+    StatusEnum:
+      enum:
+      - MITIGATED
+      - BREACHED
+      - ERROR
+      type: string
+      description: |-
+        * `MITIGATED` - Заблоковано захистом
+        * `BREACHED` - Успішний прорив
+        * `ERROR` - Помилка симуляції
+    TokenObtainPair:
+      type: object
+      properties:
+        access:
+          type: string
+          readOnly: true
+        refresh:
+          type: string
+          readOnly: true
+      required:
+      - access
+      - refresh
+    TokenObtainPairRequest:
+      type: object
+      properties:
+        username:
+          type: string
+          writeOnly: true
+          minLength: 1
+        password:
+          type: string
+          writeOnly: true
+          minLength: 1
+      required:
+      - password
+      - username
+    TokenRefresh:
+      type: object
+      properties:
+        access:
+          type: string
+          readOnly: true
+      required:
+      - access
+    TokenRefreshRequest:
+      type: object
+      properties:
+        refresh:
+          type: string
+          writeOnly: true
+          minLength: 1
+      required:
+      - refresh
+    VulnerabilityTypeEnum:
+      enum:
+      - SQLI
+      - XSS
+      - BAC
+      - CSRF
+      - SSRF
+      type: string
+      description: |-
+        * `SQLI` - SQL Injection
+        * `XSS` - Cross-Site Scripting
+        * `BAC` - Broken Access Control
+        * `CSRF` - Cross-Site Request Forgery
+        * `SSRF` - Server-Side Request Forgery
+  securitySchemes:
+    basicAuth:
+      type: http
+      scheme: basic
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: sessionid
+    jwtAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+tags:
+- name: Authentication
+  description: JWT токени та автентифікація користувачів
+- name: Scenarios
+  description: Управління сценаріями загроз і запуск симуляцій атак
